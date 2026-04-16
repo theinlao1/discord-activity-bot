@@ -46,7 +46,7 @@ class Banner(commands.Cog):
         except:
             font_title = font_name = font_small = ImageFont.load_default()
 
-        draw.text((width//2, 40), "🏆 Топ активных", font=font_title,
+        draw.text((width//2, 40), "Топ активных", font=font_title,
                 fill=(255, 215, 0), anchor="mm")
         draw.text((width//2, 85), f"Неделя до {datetime.now().strftime('%d.%m.%Y')}",
                 font=font_small, fill=(150, 150, 150), anchor="mm")
@@ -58,7 +58,7 @@ class Banner(commands.Cog):
         draw.text((800, 115), "Очки",       font=font_small, fill=(180, 180, 180))
         draw.line([(50, 140), (850, 140)], fill=(70, 70, 90), width=1)
 
-        medals = ["🥇", "🥈", "🥉", "4.", "5."]
+        medals = ["1", "2", "3", "4.", "5."]
         colors = [(255,215,0),(192,192,192),(205,127,50),(255,255,255),(255,255,255)]
 
         for i, row in enumerate(top_users):
