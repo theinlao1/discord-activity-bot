@@ -1,18 +1,21 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime
 import io
+import aiohttp
 import config
 
 class Banner(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-    
+
     @commands.Cog.listener()
     async def on_ready(self):
         print('Banner cog ready')
-    
+        self.auto_update.start()
+
+    # top users 
     @commands.command(name='топ')
     async def top_command(self, ctx):
         if ctx.author.id != config.ALLOWED_USER_ID:
@@ -77,71 +80,131 @@ class Banner(commands.Cog):
         buf.seek(0)
         return buf
 
+
+    # banner generator
     @commands.command(name='баннер')
     async def banner_command(self, ctx):
         if ctx.author.id != config.ALLOWED_USER_ID:
-            await ctx.reply('No permission')
+            await ctx.reply("У тебя нет прав, сибастьян 🙄")
             return
-        await self._send_banner(ctx.channel)
-    
-    async def _send_banner(self, channel):
-        guild = channel.guild
 
+        if not ctx.message.attachments:
+            await ctx.reply("Прикрепи картинку к сообщению! Например: `!баннер` + картинка")
+            return
+
+        attachment = ctx.message.attachments[0]
+        if not attachment.content_type or not attachment.content_type.startswith("image"):
+            await ctx.reply("Прикрепи именно картинку!")
+            return
+
+        await ctx.reply("Обновляю баннер сервера... ⏳")
+
+        # Скачиваем картинку
+        async with aiohttp.ClientSession() as session:
+            async with session.get(attachment.url) as resp:
+                img_bytes = await resp.read()
+
+        guild = ctx.guild
+        total, online = self._get_stats(guild)
+
+        banner_bytes = self._generate_server_banner(img_bytes, total, online)
+        await guild.edit(banner=banner_bytes.read())
+        await ctx.reply("✅ Баннер сервера обновлён!")
+
+
+    # updating data
+    @commands.command(name='обновить')
+    async def update_command(self, ctx):
+        if ctx.author.id != config.ALLOWED_USER_ID:
+            await ctx.reply("У тебя нет прав, сибастьян 🙄")
+            return
+        await self._update_banner(ctx.guild)
+        await ctx.reply("✅ Статистика на баннере обновлена!")
+
+    @tasks.loop(hours=1)
+    async def auto_update(self):
+        for guild in self.bot.guilds:
+            await self._update_banner(guild)
+
+    async def _update_banner(self, guild):
+        if not guild.banner:
+            return
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(guild.banner.url) as resp:
+                img_bytes = await resp.read()
+
+        total, online = self._get_stats(guild)
+        banner_bytes = self._generate_server_banner(img_bytes, total, online)
+        await guild.edit(banner=banner_bytes.read())
+
+
+    def _get_stats(self, guild):
         total = guild.member_count
         bots = sum(1 for m in guild.members if m.bot)
-        humans = total -  bots
+        humans = total - bots
+        online = sum(
+            1 for m in guild.members
+            if m.status != discord.Status.offline and not m.bot
+        )
+        return humans, online
 
-        online = sum(1 for m in guild.members
-                    if m.status != discord.Status.offline and not m.bot)
-        
-        banner = self._generate_banner(guild.name, humans, online)
-        await channel.send(file=discord.File(banner, filename="banner.png"))
+    def _generate_server_banner(self, img_bytes: bytes, total: int, online: int):
+        W, H = 960, 540
 
-    def _generate_banner(self, server_name: str, total: int, online: int):
-        width, height = 900, 400
-        img = Image.new('RGB', (width, height), color=(30, 30, 40))
-        draw = ImageDraw.Draw(img)
+        bg = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+        bg = bg.resize((W, H), Image.LANCZOS)
 
         try:
-            font_big    = ImageFont.truetype("arial.ttf", 56)
-            font_title  = ImageFont.truetype("arial.ttf", 36)
-            font_medium = ImageFont.truetype("arial.ttf", 28)
-            font_small  = ImageFont.truetype("arial.ttf", 20)
+            font_big    = ImageFont.truetype("arial.ttf", 72)
+            font_medium = ImageFont.truetype("arial.ttf", 26)
+            font_small  = ImageFont.truetype("arial.ttf", 18)
         except:
-            font_big = font_title = font_medium = font_small = ImageFont.load_default()
+            font_big = font_medium = font_small = ImageFont.load_default()
 
-        # Фоновые декоративные круги
-        draw.ellipse([(-60, -60), (160, 160)],   fill=(40, 40, 60))
-        draw.ellipse([(760, 260), (980, 480)],   fill=(40, 40, 60))
+        # circle
+        circle_x, circle_y = 750, 270
+        circle_r = 160
 
-        # Название сервера
-        draw.text((width // 2, 60), server_name, font=font_title,
-                fill=(255, 215, 0), anchor="mm")
+        circle_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        circle_draw = ImageDraw.Draw(circle_layer)
 
-        # Разделитель
-        draw.line([(100, 100), (800, 100)], fill=(70, 70, 90), width=2)
+        # shadow
+        circle_draw.ellipse(
+            [circle_x - circle_r + 4, circle_y - circle_r + 4,
+            circle_x + circle_r + 4, circle_y + circle_r + 4],
+            fill=(0, 0, 0, 80)
+        )
+        # main circle
+        circle_draw.ellipse(
+            [circle_x - circle_r, circle_y - circle_r,
+            circle_x + circle_r, circle_y + circle_r],
+            fill=(0, 0, 0, 200),
+            outline=(255, 255, 255, 60),
+            width=2
+        )
 
-        # Блок — всего участников
-        draw.rectangle([(80, 130), (420, 290)], fill=(40, 40, 55), outline=(70, 70, 90))
-        draw.text((250, 175), str(total), font=font_big,
-                fill=(255, 255, 255), anchor="mm")
-        draw.text((250, 240), "👥 Всего участников", font=font_medium,
-                fill=(180, 180, 200), anchor="mm")
+        bg = Image.alpha_composite(bg, circle_layer)
+        draw = ImageDraw.Draw(bg)
 
-        # Блок — онлайн
-        draw.rectangle([(480, 130), (820, 290)], fill=(40, 55, 40), outline=(70, 90, 70))
-        draw.text((650, 175), str(online), font=font_big,
-                fill=(100, 255, 100), anchor="mm")
-        draw.text((650, 240), "🟢 Сейчас онлайн", font=font_medium,
-                fill=(150, 220, 150), anchor="mm")
+        # number of users
+        draw.text((circle_x, circle_y - 20), str(total),
+                font=font_big, fill=(255, 255, 255), anchor="mm")
 
-        # Дата обновления
-        date_str = datetime.now().strftime("%d.%m.%Y %H:%M")
-        draw.text((width // 2, 340), f"Обновлено: {date_str}", font=font_small,
-                fill=(100, 100, 120), anchor="mm")
+        draw.text((circle_x, circle_y + 55), "УЧАСТНИКОВ",
+                font=font_medium, fill=(200, 200, 200), anchor="mm")
 
+        draw.line(
+            [(circle_x - 80, circle_y + 85), (circle_x + 80, circle_y + 85)],
+            fill=(255, 255, 255, 80), width=1
+        )
+
+        draw.text((circle_x, circle_y + 110), f"🟢  {online} онлайн",
+                font=font_small, fill=(100, 255, 100), anchor="mm")
+
+        result = bg.convert("RGB")
         buf = io.BytesIO()
-        img.save(buf, format='PNG')
+        result.save(buf, format="PNG")
         buf.seek(0)
         return buf
 
