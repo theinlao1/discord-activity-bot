@@ -111,6 +111,33 @@ class Banner(commands.Cog):
         await guild.edit(banner=banner_bytes.read())
         await ctx.reply("✅ Баннер сервера обновлён!")
 
+    @commands.command(name='тестбаннер')
+    async def test_banner_command(self, ctx):
+        if ctx.author.id != config.ALLOWED_USER_ID:
+            await ctx.reply("У тебя нет прав, сибастьян 🙄")
+            return
+
+        if not ctx.message.attachments:
+            await ctx.reply("Прикрепи картинку к сообщению!")
+            return
+
+        attachment = ctx.message.attachments[0]
+        if not attachment.content_type or not attachment.content_type.startswith("image"):
+            await ctx.reply("Прикрепи именно картинку!")
+            return
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(attachment.url) as resp:
+                img_bytes = await resp.read()
+
+        guild = ctx.guild
+        total, online = self._get_stats(guild)
+
+        banner_bytes = self._generate_server_banner(img_bytes, total, online)
+        await ctx.channel.send(
+            content="Вот как будет выглядеть баннер:",
+            file=discord.File(banner_bytes, filename="test_banner.png")
+        )
 
     # updating data
     @commands.command(name='обновить')
@@ -152,59 +179,45 @@ class Banner(commands.Cog):
     def _generate_server_banner(self, img_bytes: bytes, total: int, online: int):
         W, H = 960, 540
 
-        bg = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+        bg = Image.open(io.BytesIO(img_bytes)).convert("RGB")
         bg = bg.resize((W, H), Image.LANCZOS)
 
-        try:
-            font_big    = ImageFont.truetype("arial.ttf", 72)
-            font_medium = ImageFont.truetype("arial.ttf", 26)
-            font_small  = ImageFont.truetype("arial.ttf", 18)
-        except:
-            font_big = font_medium = font_small = ImageFont.load_default()
-
-        # circle
-        circle_x, circle_y = 750, 270
-        circle_r = 160
-
-        circle_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        circle_draw = ImageDraw.Draw(circle_layer)
-
-        # shadow
-        circle_draw.ellipse(
-            [circle_x - circle_r + 4, circle_y - circle_r + 4,
-            circle_x + circle_r + 4, circle_y + circle_r + 4],
-            fill=(0, 0, 0, 80)
-        )
-        # main circle
-        circle_draw.ellipse(
-            [circle_x - circle_r, circle_y - circle_r,
-            circle_x + circle_r, circle_y + circle_r],
-            fill=(0, 0, 0, 200),
-            outline=(255, 255, 255, 60),
-            width=2
-        )
-
-        bg = Image.alpha_composite(bg, circle_layer)
         draw = ImageDraw.Draw(bg)
 
-        # number of users
-        draw.text((circle_x, circle_y - 20), str(total),
-                font=font_big, fill=(255, 255, 255), anchor="mm")
+        try:
+            font_big    = ImageFont.truetype("arial.ttf", 64)
+            font_medium = ImageFont.truetype("arialbd.ttf", 32)  # жирный
+        except:
+            font_big = font_medium = ImageFont.load_default()
 
-        draw.text((circle_x, circle_y + 55), "УЧАСТНИКОВ",
-                font=font_medium, fill=(200, 200, 200), anchor="mm")
+        padding = 80
+        block_w, block_h = 280, 120
+        x1, y1 = padding, H - block_h - padding
+        x2, y2 = x1 + block_w, y1 + block_h
 
-        draw.line(
-            [(circle_x - 80, circle_y + 85), (circle_x + 80, circle_y + 85)],
-            fill=(255, 255, 255, 80), width=1
+        draw.rectangle([x1, y1, x2, y2], fill=(20, 20, 30))
+        draw.rectangle([x1, y1, x2, y2], outline=(255, 255, 255), width=2)
+
+        # Число участников
+        draw.text(
+            (x1 + block_w // 2, y1 + 38),
+            str(total),
+            font=font_big,
+            fill=(255, 255, 255),
+            anchor="mm"
         )
 
-        draw.text((circle_x, circle_y + 110), f"🟢  {online} онлайн",
-                font=font_small, fill=(100, 255, 100), anchor="mm")
+        # Подпись
+        draw.text(
+            (x1 + block_w // 2, y1 + 85),
+            "УЧАСТНИКОВ",
+            font=font_medium,
+            fill=(200, 200, 200),
+            anchor="mm"
+        )
 
-        result = bg.convert("RGB")
         buf = io.BytesIO()
-        result.save(buf, format="PNG")
+        bg.save(buf, format="PNG")
         buf.seek(0)
         return buf
 

@@ -16,11 +16,12 @@ async def main():
     @bot.event
     async def on_ready():
         print(f"ботяра запущен: {bot.user}")
-    
+
+    init_db()
+
     await bot.load_extension('cogs.activity')
     await bot.load_extension('cogs.banner')
 
-    init_db()
     await bot.start(config.TOKEN)
 
 if __name__ == '__main__':
