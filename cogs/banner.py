@@ -55,7 +55,7 @@ class Banner(commands.Cog):
 
         draw.text((width//2, 40), "Топ активных", font=font_title,
                 fill=(255, 215, 0), anchor="mm")
-        draw.text((width//2, 85), f"Месяц до {datetime.now().strftime('%d.%m.%Y')}",
+        draw.text((width//2, 85), f"{datetime.now().strftime('%d.%m.%Y')}",
                 font=font_small, fill=(150, 150, 150), anchor="mm")
         draw.line([(50, 105), (850, 105)], fill=(70, 70, 90), width=2)
 
