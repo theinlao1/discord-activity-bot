@@ -66,7 +66,7 @@ class Activity(commands.Cog):
                 self._save_voice_time(member)
  
             elif not was_active and now_active:
-                # Размьютился — начинаем считать если в канале 2+ активных
+                # Размьютился начинаем считать если в канале 2+ активных
                 if self._count_real_users(after.channel) >= MIN_USERS_IN_VOICE:
                     self.voice_join_time[member.id] = datetime.now()
  
@@ -115,10 +115,10 @@ class Activity(commands.Cog):
                     if not self._is_active(m.voice) or real_users < MIN_USERS_IN_VOICE:
                         self._save_voice_time(m)
  
-    # Надёжный сброс раз в месяц проверяем дату каждый день
+
     @tasks.loop(hours=24)
     async def monthly_reset(self):
-        if datetime.now().day == 1:  # первое число каждого месяца
+        if datetime.now().day == 1:  #первое число каждого месяца
             reset_status()
             print(f"[{datetime.now().strftime('%d.%m.%Y %H:%M')}] Активность сброшена за месяц")
  
